@@ -1,0 +1,40 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build
+build/
+*.spec
+
+# Runtime
+*.log
+*.tmp
+*.temp
+
+# JARVIS temporary updater files
+_JARVIS_STAGING/
+_JARVIS_BACKUP/
+
+# Secrets
+.env
+*.token
+secrets/
+credentials/
+
+# Generated media
+media/images/*
+media/videos/*
+
+# IDE
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+Desktop.ini

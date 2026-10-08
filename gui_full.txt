@@ -1,0 +1,1257 @@
+﻿import threading
+import os
+import re
+import io
+import subprocess
+import tkinter as tk
+
+import customtkinter as ctk
+
+from PIL import Image
+
+import psutil
+
+try:
+    import win32clipboard
+except ImportError:
+    win32clipboard = None
+
+from core.agent import Agent
+from core.voice import VoiceEngine
+
+
+# ============================================================
+# JARVIS HUD CONFIG
+# ============================================================
+
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("dark-blue")
+
+
+class HUD(ctk.CTk):
+
+    # ========================================================
+    # INIT
+    # ========================================================
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.title(
+            "JARVIS"
+        )
+
+        self.geometry(
+            "1400x850"
+        )
+
+        self.minsize(
+            1100,
+            700
+        )
+
+        self.configure(
+            fg_color="#05070A"
+        )
+
+        # ----------------------------------------------------
+        # Agent
+        # ----------------------------------------------------
+
+        self.agent = Agent()
+
+        # ----------------------------------------------------
+        # State
+        # ----------------------------------------------------
+
+        self.current_image_path = None
+
+        self.current_image = None
+
+        self.is_processing = False
+
+        # ----------------------------------------------------
+        # Grid
+        # ----------------------------------------------------
+
+        self.grid_columnconfigure(
+            0,
+            weight=1
+        )
+
+        self.grid_columnconfigure(
+            1,
+            weight=1
+        )
+
+        self.grid_rowconfigure(
+            1,
+            weight=1
+        )
+
+        self.grid_rowconfigure(
+            2,
+            weight=0
+        )
+
+        # ----------------------------------------------------
+        # Build UI
+        # ----------------------------------------------------
+
+        self.build_header()
+
+        self.build_main()
+
+        self.build_input()
+
+        # ----------------------------------------------------
+        # Initial status
+        # ----------------------------------------------------
+
+        self.set_status(
+            "SYSTEM ONLINE"
+        )
+
+        self.add_chat(
+            "JARVIS",
+            "à¸£à¸°à¸šà¸šà¸žà¸£à¹‰à¸­à¸¡à¸—à¸³à¸‡à¸²à¸™à¸„à¸£à¸±à¸š"
+        )
+
+        # ----------------------------------------------------
+        # Enter
+        # ----------------------------------------------------
+
+        self.bind(
+            "<Return>",
+            self.on_enter
+        )
+
+        # ----------------------------------------------------
+        # Window close
+        # ----------------------------------------------------
+
+        self.protocol(
+            "WM_DELETE_WINDOW",
+            self.on_close
+        )
+
+    # ========================================================
+    # HEADER
+    # ========================================================
+
+    def build_header(self):
+
+        self.header = ctk.CTkFrame(
+            self,
+            fg_color="#080C12",
+            corner_radius=0,
+            height=90
+        )
+
+        self.header.grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="ew"
+        )
+
+        self.header.grid_columnconfigure(
+            1,
+            weight=1
+        )
+
+        # ----------------------------------------------------
+        # Logo
+        # ----------------------------------------------------
+
+        self.logo = ctk.CTkLabel(
+            self.header,
+            text="â—‰",
+            font=(
+                "Segoe UI",
+                42,
+                "bold"
+            ),
+            text_color="#35B8FF"
+        )
+
+        self.logo.grid(
+            row=0,
+            column=0,
+            padx=(25, 10),
+            pady=15
+        )
+
+        # ----------------------------------------------------
+        # Title
+        # ----------------------------------------------------
+
+        title_frame = ctk.CTkFrame(
+            self.header,
+            fg_color="transparent"
+        )
+
+        title_frame.grid(
+            row=0,
+            column=1,
+            sticky="w"
+        )
+
+        self.title_label = ctk.CTkLabel(
+            title_frame,
+            text="J A R V I S",
+            font=(
+                "Segoe UI",
+                26,
+                "bold"
+            ),
+            text_color="#E8F7FF"
+        )
+
+        self.title_label.pack(
+            anchor="w"
+        )
+
+        self.subtitle_label = ctk.CTkLabel(
+            title_frame,
+            text="JUST A RATHER VERY INTELLIGENT SYSTEM",
+            font=(
+                "Consolas",
+                10
+            ),
+            text_color="#5B7D8C"
+        )
+
+        self.subtitle_label.pack(
+            anchor="w"
+        )
+
+        # ----------------------------------------------------
+        # Status
+        # ----------------------------------------------------
+
+        self.status_label = ctk.CTkLabel(
+            self.header,
+            text="SYSTEM ONLINE",
+            font=(
+                "Consolas",
+                12,
+                "bold"
+            ),
+            text_color="#48FF9B"
+        )
+
+        self.status_label.grid(
+            row=0,
+            column=2,
+            padx=25
+        )
+
+    # ========================================================
+    # MAIN
+    # ========================================================
+
+    def build_main(self):
+
+        # ====================================================
+        # LEFT - CHAT
+        # ====================================================
+
+        self.chat_panel = ctk.CTkFrame(
+            self,
+            fg_color="#070A0F",
+            corner_radius=0
+        )
+
+        self.chat_panel.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=(12, 6),
+            pady=(12, 8)
+        )
+
+        self.chat_panel.grid_rowconfigure(
+            1,
+            weight=1
+        )
+
+        self.chat_panel.grid_columnconfigure(
+            0,
+            weight=1
+        )
+
+        # ----------------------------------------------------
+        # Chat header
+        # ----------------------------------------------------
+
+        self.chat_title = ctk.CTkLabel(
+            self.chat_panel,
+            text="  COMMUNICATION TERMINAL",
+            anchor="w",
+            font=(
+                "Consolas",
+                13,
+                "bold"
+            ),
+            text_color="#35B8FF"
+        )
+
+        self.chat_title.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=15,
+            pady=(12, 8)
+        )
+
+        # ----------------------------------------------------
+        # Chat box
+        # ----------------------------------------------------
+
+        self.chat_box = ctk.CTkTextbox(
+            self.chat_panel,
+            font=(
+                "Consolas",
+                12
+            ),
+            fg_color="#030507",
+            text_color="#D8EFFF",
+            border_width=1,
+            border_color="#142431",
+            corner_radius=8,
+            wrap="word"
+        )
+
+        self.chat_box.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=12,
+            pady=(0, 12)
+        )
+
+        self.chat_box.configure(
+            state="disabled"
+        )
+
+        # ====================================================
+        # RIGHT - IMAGE ENGINE
+        # ====================================================
+
+        self.image_panel = ctk.CTkFrame(
+            self,
+            fg_color="#070A0F",
+            corner_radius=0
+        )
+
+        self.image_panel.grid(
+            row=1,
+            column=1,
+            sticky="nsew",
+            padx=(6, 12),
+            pady=(12, 8)
+        )
+
+        self.image_panel.grid_rowconfigure(
+            1,
+            weight=1
+        )
+
+        self.image_panel.grid_columnconfigure(
+            0,
+            weight=1
+        )
+
+        # ----------------------------------------------------
+        # Image title
+        # ----------------------------------------------------
+
+        self.image_title = ctk.CTkLabel(
+            self.image_panel,
+            text="  IMAGE ENGINE",
+            anchor="w",
+            font=(
+                "Consolas",
+                13,
+                "bold"
+            ),
+            text_color="#FF4D88"
+        )
+
+        self.image_title.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=15,
+            pady=(12, 8)
+        )
+
+        # ----------------------------------------------------
+        # Image display
+        # ----------------------------------------------------
+
+        self.image_display_frame = ctk.CTkFrame(
+            self.image_panel,
+            fg_color="#030507",
+            border_width=1,
+            border_color="#142431",
+            corner_radius=8
+        )
+
+        self.image_display_frame.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=12,
+            pady=(0, 8)
+        )
+
+        self.image_display_frame.grid_rowconfigure(
+            0,
+            weight=1
+        )
+
+        self.image_display_frame.grid_columnconfigure(
+            0,
+            weight=1
+        )
+
+        self.image_label = ctk.CTkLabel(
+            self.image_display_frame,
+            text="IMAGE ENGINE\n\n"
+                 "WAITING FOR IMAGE...",
+            font=(
+                "Consolas",
+                13
+            ),
+            text_color="#35505F"
+        )
+
+        self.image_label.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=10,
+            pady=10
+        )
+
+        # ----------------------------------------------------
+        # Image buttons
+        # ----------------------------------------------------
+
+        self.image_buttons = ctk.CTkFrame(
+            self.image_panel,
+            fg_color="transparent"
+        )
+
+        self.image_buttons.grid(
+            row=2,
+            column=0,
+            sticky="ew",
+            padx=12,
+            pady=(0, 12)
+        )
+
+        self.image_buttons.grid_columnconfigure(
+            0,
+            weight=1
+        )
+
+        self.image_buttons.grid_columnconfigure(
+            1,
+            weight=1
+        )
+
+        self.copy_button = ctk.CTkButton(
+            self.image_buttons,
+            text="COPY IMAGE",
+            height=38,
+            font=(
+                "Consolas",
+                11,
+                "bold"
+            ),
+            fg_color="#101C26",
+            hover_color="#173548",
+            border_width=1,
+            border_color="#24516B",
+            command=self.copy_image
+        )
+
+        self.copy_button.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=(0, 5)
+        )
+
+        self.open_button = ctk.CTkButton(
+            self.image_buttons,
+            text="OPEN IMAGE",
+            height=38,
+            font=(
+                "Consolas",
+                11,
+                "bold"
+            ),
+            fg_color="#101C26",
+            hover_color="#173548",
+            border_width=1,
+            border_color="#24516B",
+            command=self.open_image
+        )
+
+        self.open_button.grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            padx=(5, 0)
+        )
+
+    # ========================================================
+    # INPUT
+    # ========================================================
+
+    def build_input(self):
+
+        self.input_panel = ctk.CTkFrame(
+            self,
+            fg_color="#080C12",
+            corner_radius=0,
+            height=80
+        )
+
+        self.input_panel.grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=0,
+            pady=0
+        )
+
+        self.input_panel.grid_columnconfigure(
+            0,
+            weight=1
+        )
+
+        # ----------------------------------------------------
+        # Entry
+        # ----------------------------------------------------
+
+        self.entry = ctk.CTkEntry(
+            self.input_panel,
+            placeholder_text=(
+                "ENTER COMMAND..."
+            ),
+            height=46,
+            font=(
+                "Consolas",
+                13
+            ),
+            fg_color="#030507",
+            border_color="#1B394A",
+            border_width=1
+        )
+
+        self.entry.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=(18, 8),
+            pady=16
+        )
+
+        # ----------------------------------------------------
+        # Send
+        # ----------------------------------------------------
+
+        self.send_button = ctk.CTkButton(
+            self.input_panel,
+            text="SEND",
+            width=110,
+            height=46,
+            font=(
+                "Consolas",
+                12,
+                "bold"
+            ),
+            fg_color="#12364A",
+            hover_color="#18506D",
+            command=self.send_message
+        )
+
+        self.send_button.grid(
+            row=0,
+            column=1,
+            padx=(0, 18),
+            pady=16
+        )
+
+        self.entry.focus_set()
+
+    # ========================================================
+    # STATUS
+    # ========================================================
+
+    def set_status(
+        self,
+        text,
+        color="#48FF9B"
+    ):
+
+        self.status_label.configure(
+            text=text,
+            text_color=color
+        )
+
+    # ========================================================
+    # CHAT
+    # ========================================================
+
+    def add_chat(
+        self,
+        sender,
+        message
+    ):
+
+        if message is None:
+            message = ""
+
+        if not isinstance(
+            message,
+            str
+        ):
+
+            message = str(message)
+
+        self.chat_box.configure(
+            state="normal"
+        )
+
+        self.chat_box.insert(
+            "end",
+            f"\n[{sender}]\n",
+        )
+
+        self.chat_box.insert(
+            "end",
+            f"{message}\n"
+        )
+
+        self.chat_box.insert(
+            "end",
+            "\n"
+        )
+
+        self.chat_box.see(
+            "end"
+        )
+
+        self.chat_box.configure(
+            state="disabled"
+        )
+
+    # ========================================================
+    # ENTER
+    # ========================================================
+
+    def on_enter(
+        self,
+        event=None
+    ):
+
+        self.send_message()
+
+        return "break"
+
+    # ========================================================
+    # SEND
+    # ========================================================
+
+    def send_message(self):
+
+        if self.is_processing:
+            return
+
+        text = self.entry.get().strip()
+
+        if not text:
+            return
+
+        self.entry.delete(
+            0,
+            "end"
+        )
+
+        self.add_chat(
+            "USER",
+            text
+        )
+
+        self.set_status(
+            "PROCESSING...",
+            "#FFD166"
+        )
+
+        self.is_processing = True
+
+        self.send_button.configure(
+            state="disabled"
+        )
+
+        thread = threading.Thread(
+            target=self.process_message,
+            args=(text,),
+            daemon=True
+        )
+
+        thread.start()
+
+    # ========================================================
+    # PROCESS
+    # ========================================================
+
+    def process_message(
+        self,
+        text
+    ):
+
+        try:
+
+            answer = self.agent.handle(
+                text
+            )
+
+        except Exception as e:
+
+            answer = (
+                "à¹€à¸à¸´à¸”à¸‚à¹‰à¸­à¸œà¸´à¸”à¸žà¸¥à¸²à¸”à¸„à¸£à¸±à¸š\n\n"
+                f"{e}"
+            )
+
+        # ----------------------------------------------------
+        # GUI update must run on main thread
+        # ----------------------------------------------------
+
+        self.after(
+            0,
+            lambda: self.finish(
+                answer
+            )
+        )
+
+    # ========================================================
+    # FINISH
+    # ========================================================
+
+    def finish(
+        self,
+        answer
+    ):
+
+        # ----------------------------------------------------
+        # Absolute protection against bool / None
+        # ----------------------------------------------------
+
+        if answer is None:
+
+            answer = ""
+
+        elif not isinstance(
+            answer,
+            str
+        ):
+
+            answer = str(
+                answer
+            )
+
+        # ----------------------------------------------------
+        # Chat
+        # ----------------------------------------------------
+
+        self.add_chat(
+            "JARVIS",
+            answer
+        )
+
+        # ----------------------------------------------------
+        # Image detection
+        # ----------------------------------------------------
+
+        image_path = self.find_image_path(
+            answer
+        )
+
+        if image_path:
+
+            self.show_image(
+                image_path
+            )
+
+        # ----------------------------------------------------
+        # Status
+        # ----------------------------------------------------
+
+        self.set_status(
+            "SYSTEM ONLINE",
+            "#48FF9B"
+        )
+
+        self.is_processing = False
+
+        self.send_button.configure(
+            state="normal"
+        )
+
+        self.entry.focus_set()
+
+    # ========================================================
+    # FIND IMAGE PATH
+    # ========================================================
+
+    def find_image_path(
+        self,
+        text
+    ):
+
+        # ----------------------------------------------------
+        # à¸›à¹‰à¸­à¸‡à¸à¸±à¸™ None
+        # ----------------------------------------------------
+
+        if text is None:
+
+            return None
+
+        # ----------------------------------------------------
+        # à¸›à¹‰à¸­à¸‡à¸à¸±à¸™ bool / int / object
+        # ----------------------------------------------------
+
+        if not isinstance(
+            text,
+            str
+        ):
+
+            text = str(
+                text
+            )
+
+        # ====================================================
+        # IMAGE_PATH
+        # ====================================================
+
+        pattern = (
+            r"IMAGE_PATH:\s*(.+)"
+        )
+
+        match = re.search(
+            pattern,
+            text,
+            re.IGNORECASE
+        )
+
+        if match:
+
+            path = (
+                match.group(1)
+                .strip()
+            )
+
+            path = path.strip(
+                '"'
+            )
+
+            path = path.strip(
+                "'"
+            )
+
+            # -----------------------------------------------
+            # à¸–à¹‰à¸²à¸¡à¸µà¸‚à¹‰à¸­à¸„à¸§à¸²à¸¡à¸•à¹ˆà¸­à¸—à¹‰à¸²à¸¢ path
+            # -----------------------------------------------
+
+            if "\n" in path:
+
+                path = path.split(
+                    "\n",
+                    1
+                )[0].strip()
+
+            if os.path.exists(
+                path
+            ):
+
+                return path
+
+        # ====================================================
+        # PNG
+        # ====================================================
+
+        png_pattern = (
+            r"([A-Za-z]:[\\/]"
+            r"[^<>:\"|?*\r\n]+"
+            r"\.png)"
+        )
+
+        matches = re.findall(
+            png_pattern,
+            text,
+            re.IGNORECASE
+        )
+
+        for path in matches:
+
+            path = path.strip()
+
+            path = path.strip(
+                '"'
+            )
+
+            path = path.strip(
+                "'"
+            )
+
+            if os.path.exists(
+                path
+            ):
+
+                return path
+
+        # ====================================================
+        # JPG / JPEG / WEBP
+        # ====================================================
+
+        image_pattern = (
+            r"([A-Za-z]:[\\/]"
+            r"[^<>:\"|?*\r\n]+"
+            r"\.(?:png|jpg|jpeg|webp))"
+        )
+
+        matches = re.findall(
+            image_pattern,
+            text,
+            re.IGNORECASE
+        )
+
+        for path in matches:
+
+            path = path.strip()
+
+            path = path.strip(
+                '"'
+            )
+
+            path = path.strip(
+                "'"
+            )
+
+            if os.path.exists(
+                path
+            ):
+
+                return path
+
+        return None
+
+    # ========================================================
+    # SHOW IMAGE
+    # ========================================================
+
+    def show_image(
+        self,
+        path
+    ):
+
+        try:
+
+            if not path:
+                return
+
+            if not os.path.exists(
+                path
+            ):
+
+                return
+
+            image = Image.open(
+                path
+            )
+
+            image = image.convert(
+                "RGB"
+            )
+
+            # ------------------------------------------------
+            # Calculate display size
+            # ------------------------------------------------
+
+            frame_width = (
+                self.image_display_frame
+                .winfo_width()
+            )
+
+            frame_height = (
+                self.image_display_frame
+                .winfo_height()
+            )
+
+            if frame_width < 100:
+                frame_width = 600
+
+            if frame_height < 100:
+                frame_height = 600
+
+            max_width = (
+                frame_width - 40
+            )
+
+            max_height = (
+                frame_height - 40
+            )
+
+            image.thumbnail(
+                (
+                    max_width,
+                    max_height
+                ),
+                Image.Resampling.LANCZOS
+            )
+
+            ctk_image = ctk.CTkImage(
+                light_image=image,
+                dark_image=image,
+                size=image.size
+            )
+
+            self.current_image = (
+                ctk_image
+            )
+
+            self.current_image_path = (
+                path
+            )
+
+            self.image_label.configure(
+                image=ctk_image,
+                text=""
+            )
+
+            self.image_label.image = (
+                ctk_image
+            )
+
+            self.image_title.configure(
+                text=(
+                    "  IMAGE ENGINE  â€¢  "
+                    "IMAGE READY"
+                )
+            )
+
+        except Exception as e:
+
+            print(
+                "[GUI] Image display error:"
+            )
+
+            print(
+                repr(e)
+            )
+
+            self.image_label.configure(
+                image=None,
+                text=(
+                    "IMAGE ERROR\n\n"
+                    f"{e}"
+                )
+            )
+
+    # ========================================================
+    # COPY IMAGE
+    # ========================================================
+
+    def copy_image(self):
+
+        path = (
+            self.current_image_path
+        )
+
+        if not path:
+
+            self.set_status(
+                "NO IMAGE",
+                "#FF6B6B"
+            )
+
+            return
+
+        if not os.path.exists(
+            path
+        ):
+
+            self.set_status(
+                "IMAGE NOT FOUND",
+                "#FF6B6B"
+            )
+
+            return
+
+        if win32clipboard is None:
+
+            self.set_status(
+                "PYWIN32 REQUIRED",
+                "#FF6B6B"
+            )
+
+            return
+
+        try:
+
+            image = Image.open(
+                path
+            ).convert(
+                "RGB"
+            )
+
+            output = io.BytesIO()
+
+            image.save(
+                output,
+                "BMP"
+            )
+
+            data = (
+                output.getvalue()[14:]
+            )
+
+            output.close()
+
+            win32clipboard.OpenClipboard()
+
+            try:
+
+                win32clipboard.EmptyClipboard()
+
+                win32clipboard.SetClipboardData(
+                    win32clipboard.CF_DIB,
+                    data
+                )
+
+            finally:
+
+                win32clipboard.CloseClipboard()
+
+            self.set_status(
+                "IMAGE COPIED",
+                "#48FF9B"
+            )
+
+        except Exception as e:
+
+            print(
+                "[GUI] Clipboard error:"
+            )
+
+            print(
+                repr(e)
+            )
+
+            self.set_status(
+                "COPY FAILED",
+                "#FF6B6B"
+            )
+
+    # ========================================================
+    # OPEN IMAGE
+    # ========================================================
+
+    def open_image(self):
+
+        path = (
+            self.current_image_path
+        )
+
+        if not path:
+
+            self.set_status(
+                "NO IMAGE",
+                "#FF6B6B"
+            )
+
+            return
+
+        if not os.path.exists(
+            path
+        ):
+
+            self.set_status(
+                "IMAGE NOT FOUND",
+                "#FF6B6B"
+            )
+
+            return
+
+        try:
+
+            os.startfile(
+                path
+            )
+
+            self.set_status(
+                "IMAGE OPENED",
+                "#48FF9B"
+            )
+
+        except Exception:
+
+            try:
+
+                subprocess.Popen(
+                    [
+                        "explorer.exe",
+                        "/select,",
+                        path
+                    ]
+                )
+
+                self.set_status(
+                    "IMAGE OPENED",
+                    "#48FF9B"
+                )
+
+            except Exception as e:
+
+                print(
+                    "[GUI] "
+                    f"Open image error: {e}"
+                )
+
+                self.set_status(
+                    "OPEN FAILED",
+                    "#FF6B6B"
+                )
+
+    # ========================================================
+    # CLOSE
+    # ========================================================
+
+    def on_close(self):
+
+        try:
+
+            self.destroy()
+
+        except Exception:
+            pass
+
+
+# ============================================================
+# DIRECT RUN
+# ============================================================
+
+if __name__ == "__main__":
+
+    app = HUD()
+
+    app.mainloop()

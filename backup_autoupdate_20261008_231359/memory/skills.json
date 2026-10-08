@@ -1,0 +1,17 @@
+{
+  "addmodecommand": {
+    "name": "AddModeCommand",
+    "description": "เพิ่มคำสั่งโหมดการทำงานใหม่",
+    "triggers": [
+      "เพิ่มคำสั่งโหมดทำงาน",
+      "สร้างโหมดใหม่"
+    ],
+    "actions": [
+      {
+        "type": "say",
+        "value": "โหมดการทำงานใหม่ถูกเพิ่มเรียบร้อยแล้ว"
+      }
+    ],
+    "id": "addmodecommand"
+  }
+}
