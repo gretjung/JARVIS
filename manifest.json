@@ -1,0 +1,9 @@
+﻿{
+    "app_name":  "JARVIS",
+    "version":  "1.0.1",
+    "channel":  "stable",
+    "package_url":  "https://github.com/gretjung/JARVIS/releases/download/v1.0.1/JARVIS-1.0.1.zip",
+    "sha256":  "90741da6304c0864f65af7f7bd6ba4860d5b2191f68130e8da65c42f9c5abdff",
+    "notes":  "JARVIS v1.0.1 - GitHub Auto Update",
+    "release_url":  "https://github.com/gretjung/JARVIS/releases/tag/v1.0.1"
+}
