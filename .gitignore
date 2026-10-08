@@ -38,3 +38,7 @@ media/videos/*
 # Windows
 Thumbs.db
 Desktop.ini
+# JARVIS build output
+dist/
+release/
+update_backups/
